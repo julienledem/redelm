@@ -17,10 +17,10 @@ package redelm.data.simple;
 
 import redelm.io.RecordConsumer;
 
-public class BoolValue extends Primitive {
+public class BooleanValue extends Primitive {
 
   private final boolean bool;
-  public BoolValue(boolean bool) {
+  public BooleanValue(boolean bool) {
     this.bool = bool;
   }
 
@@ -30,7 +30,7 @@ public class BoolValue extends Primitive {
   }
 
   @Override
-  public boolean getBool() {
+  public boolean getBoolean() {
     return bool;
   }
 

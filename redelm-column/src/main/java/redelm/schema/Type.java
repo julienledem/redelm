@@ -26,10 +26,10 @@ abstract public class Type {
   private final String name;
   private final Repetition repetition;
 
-  public Type(String name, Repetition repeatition) {
+  public Type(String name, Repetition repetition) {
     super();
     this.name = name;
-    this.repetition = repeatition;
+    this.repetition = repetition;
   }
 
   public String getName() {
@@ -56,8 +56,24 @@ abstract public class Type {
     return (PrimitiveType)this;
   }
 
-  abstract public String toString(String indent);
+  abstract public StringBuilder toStringBuilder(String indent);
 
   abstract public void accept(TypeVisitor visitor);
 
+  @Override
+  public int hashCode() {
+      return typeHashCode();
+  }
+
+  protected abstract int typeHashCode();
+
+  protected abstract boolean typeEquals(Type other);
+
+  @Override
+  public boolean equals(Object other) {
+    if (!(other instanceof Type) || other == null) {
+      return false;
+    }
+    return typeEquals((Type)other);
+  }
 }
