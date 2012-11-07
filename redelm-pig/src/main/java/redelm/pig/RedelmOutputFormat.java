@@ -18,14 +18,6 @@ package redelm.pig;
 import java.io.IOException;
 import java.util.Collection;
 
-import redelm.column.ColumnDescriptor;
-import redelm.column.ColumnWriter;
-import redelm.column.mem.MemColumn;
-import redelm.column.mem.MemColumnsStore;
-import redelm.io.ColumnIOFactory;
-import redelm.io.MessageColumnIO;
-import redelm.schema.MessageType;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -34,9 +26,17 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.pig.data.Tuple;
 
+import redelm.column.ColumnDescriptor;
+import redelm.column.ColumnWriter;
+import redelm.column.mem.MemColumn;
+import redelm.column.mem.MemColumnsStore;
+import redelm.io.ColumnIOFactory;
+import redelm.io.MessageColumnIO;
+import redelm.schema.MessageType;
+
 public class RedelmOutputFormat extends FileOutputFormat<Object, Tuple> {
 
-  private static final int THRESHOLD = 1024*1024*50;
+  private static final int THRESHOLD = 1024 * 1024 * 50;
 
   private TupleWriter tupleWriter;
   private MemColumnsStore store;
@@ -64,14 +64,15 @@ public class RedelmOutputFormat extends FileOutputFormat<Object, Tuple> {
     final Path file = getDefaultWorkFile(taskAttemptContext, "");
     final Configuration conf = taskAttemptContext.getConfiguration();
     final FileSystem fs = file.getFileSystem(conf);
-    final RedelmFileWriter w = new RedelmFileWriter(schema, pigSchema, fs.create(file, false), codecClassName);
+    final RedelmFileWriter w = new RedelmFileWriter(schema, pigSchema, fs.create(file, false),
+        codecClassName);
     w.start();
     return new RecordWriter<Object, Tuple>() {
       private int recordCount;
 
       @Override
       public void close(TaskAttemptContext taskAttemptContext) throws IOException,
-      InterruptedException {
+          InterruptedException {
         flushStore();
         w.end();
       }
@@ -79,7 +80,7 @@ public class RedelmOutputFormat extends FileOutputFormat<Object, Tuple> {
       @Override
       public void write(Object key, Tuple value) throws IOException, InterruptedException {
         tupleWriter.write(value);
-        ++ recordCount;
+        ++recordCount;
         checkBlockSizeReached();
       }
 
@@ -113,5 +114,4 @@ public class RedelmOutputFormat extends FileOutputFormat<Object, Tuple> {
       }
     };
   }
-
 }

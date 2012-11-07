@@ -58,7 +58,7 @@ public class MemColumn {
     case STRING:
       return new STRINGMemColumnReader(path);
     case BOOLEAN:
-      return new BOOLMemColumnReader(path);
+      return new BOOLEANMemColumnReader(path);
     case BINARY:
       return new BINARYMemColumnReader(path);
     case FLOAT:
@@ -219,10 +219,10 @@ public class MemColumn {
       return currentString;
     }
   }
-  private static final class BOOLMemColumnReader extends MemColumnReader {
+  private static final class BOOLEANMemColumnReader extends MemColumnReader {
     private boolean current;
 
-    public BOOLMemColumnReader(ColumnDescriptor path) {
+    public BOOLEANMemColumnReader(ColumnDescriptor path) {
       super(path);
     }
 
