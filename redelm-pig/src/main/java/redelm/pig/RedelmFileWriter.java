@@ -177,7 +177,7 @@ public class RedelmFileWriter extends BytesOutput {
   public void startDefinitionLevels() throws IOException {
     state = state.startDefinition();
     endCompression();
-    currentColumn.setRepetitionUncompressedLenght(uncompressedLength);
+    currentColumn.setRepetitionUncompressedLength(uncompressedLength);
     currentColumn.setDefinitionStart(out.getPos());
     startCompression();
   }

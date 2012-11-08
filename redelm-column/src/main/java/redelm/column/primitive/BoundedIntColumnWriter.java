@@ -1,9 +1,12 @@
 package redelm.column.primitive;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
+
+import org.apache.commons.io.IOUtils;
 
 import redelm.column.BytesOutput;
 import redelm.utils.Varint;
@@ -24,7 +27,7 @@ public class BoundedIntColumnWriter extends PrimitiveColumnWriter {
   private boolean currentValueIsRepeated = false;
   private int shouldRepeatThreshold;
   private ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-  private DataOutput bytesData = new DataOutputStream(bytes);
+  private DataOutputStream bytesData = new DataOutputStream(bytes);
   
   public BoundedIntColumnWriter(int bound) {
     int bitsPerValue = (int)Math.ceil(Math.log(bound));
@@ -40,8 +43,9 @@ public class BoundedIntColumnWriter extends PrimitiveColumnWriter {
   @Override
   public void writeData(BytesOutput out) throws IOException {
     serializeCurrentValue();
-    out.writeInt(serializedCt);
-    
+    Varint.writeSignedVarInt(serializedCt, out);
+    IOUtils.copy(new ByteArrayInputStream(bytes.toByteArray()), out);
+    reset();
   }
 
   @Override
@@ -68,13 +72,14 @@ public class BoundedIntColumnWriter extends PrimitiveColumnWriter {
   }
   
   private void serializeCurrentValue() throws IOException {
-    serializedCt++;
     if (currentValueIsRepeated) {
+      serializedCt++;
       writeBit(true);
       writeBoundedInt(currentValue);
       Varint.writeSignedVarInt(currentValueCt, bytesData);
     } else {
       for (int i = 0; i < currentValueCt; i++) {
+        serializedCt++;
         writeBit(false);
         writeBoundedInt(currentValue);
       }
