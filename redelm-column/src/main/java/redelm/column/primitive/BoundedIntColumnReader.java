@@ -11,7 +11,6 @@ public class BoundedIntColumnReader extends PrimitiveColumnReader {
   private DataInputStream bytesData;
   private int currentValueCt = 0;
   private int currentValue = 0;
-  private boolean currentValueIsRepeated = false;
   private static final int[] byteGetValueMask = new int[8];
   private int bitsPerValue = 0;
   private int bound;
@@ -39,8 +38,7 @@ public class BoundedIntColumnReader extends PrimitiveColumnReader {
         currentValueCt--;
         return currentValue;
       }
-      currentValueIsRepeated = readBit();
-      if (currentValueIsRepeated) {
+      if (readBit()) {
         readBoundedInt();
         currentValueCt = Varint.readSignedVarInt(bytesData) - 1;
       } else {
