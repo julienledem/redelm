@@ -105,7 +105,7 @@ final class MemColumnWriter implements ColumnWriter {
     if (DEBUG) log(value, repetitionLevel, definitionLevel);
     repetitionLevelColumn.writeByte(repetitionLevel);
     definitionLevelColumn.writeByte(definitionLevel);
-    dataColumn.writeInt(value);
+    dataColumn.writeInteger(value);
     ++ valueCount;
   }
 

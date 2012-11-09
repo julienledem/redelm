@@ -15,11 +15,11 @@
  */
 package redelm.column.primitive;
 
+import static redelm.column.primitive.SimplePrimitiveColumnWriter.CHARSET;
+
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
-
-import static redelm.column.primitive.SimplePrimitiveColumnWriter.CHARSET;
 
 public class SimplePrimitiveColumnReader extends PrimitiveColumnReader {
 
@@ -91,7 +91,7 @@ public class SimplePrimitiveColumnReader extends PrimitiveColumnReader {
   }
 
   @Override
-  public int readInt() {
+  public int readInteger() {
     try {
       return in.readInt();
     } catch (IOException e) {
@@ -126,6 +126,11 @@ public class SimplePrimitiveColumnReader extends PrimitiveColumnReader {
       i += 7;
     }
     return value | (b << i);
+  }
+
+  @Override
+  public void readStripe(DataInputStream in) throws IOException {
+    this.in = in;
   }
 
 }

@@ -1,14 +1,10 @@
 package redelm.column.primitive;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 
-import org.apache.commons.io.IOUtils;
-
-import redelm.column.BytesOutput;
 import redelm.utils.Varint;
 
 /**
@@ -23,14 +19,25 @@ import redelm.utils.Varint;
 public class BoundedIntColumnWriter extends PrimitiveColumnWriter {
   private int currentValue = -1;
   private int currentValueCt = -1;
-  int serializedCt = 0;
   private boolean currentValueIsRepeated = false;
-  private int shouldRepeatThreshold;
+  private int shouldRepeatThreshold = 0;
   private ByteArrayOutputStream bytes = new ByteArrayOutputStream();
   private DataOutputStream bytesData = new DataOutputStream(bytes);
-  
+  private int bound;
+  private int currentByte = 0;
+  private int currentBytePosition = 0;
+  private static final int[] byteToTrueMask = new int[8];
+  static {
+    int currentMask = 1;
+    for (int i = 0; i < byteToTrueMask.length; i++) {
+      byteToTrueMask[i] = currentMask;
+      currentMask <<= 1;
+    }
+  }
+
   public BoundedIntColumnWriter(int bound) {
-    int bitsPerValue = (int)Math.ceil(Math.log(bound));
+    this.bound = bound;
+    int bitsPerValue = (int)Math.ceil(Math.log(bound + 1)/Math.log(2));
     shouldRepeatThreshold = (bitsPerValue + 9)/(1 + bitsPerValue);
   }
 
@@ -41,21 +48,30 @@ public class BoundedIntColumnWriter extends PrimitiveColumnWriter {
 
   // This assumes that the full state must be serialized, since there is no close method
   @Override
-  public void writeData(BytesOutput out) throws IOException {
+  public void writeData(DataOutput out) throws IOException {
     serializeCurrentValue();
-    Varint.writeSignedVarInt(serializedCt, out);
-    IOUtils.copy(new ByteArrayInputStream(bytes.toByteArray()), out);
+    bytesData.close();
+    byte[] buf = bytes.toByteArray();
+    // We serialize the length so that on deserialization we can
+    // deserialize as we go, instead of having to load everything
+    // into memory
+    Varint.writeSignedVarInt(bound, out);
+    Varint.writeSignedVarInt(buf.length, out);
+    out.write(buf);
     reset();
   }
 
   @Override
   public void reset() {
-    // TODO Auto-generated method stub
-
+    currentValue = -1;
+    currentValueCt = -1;
+    currentValueIsRepeated = false;
+    bytes = new ByteArrayOutputStream();
+    bytesData = new DataOutputStream(bytes);
   }
 
   @Override
-  public void writeInt(int val) {
+  public void writeInteger(int val) {
     if (currentValue == val) {
       currentValueCt++;
       if (!currentValueIsRepeated && currentValueCt >= shouldRepeatThreshold) {
@@ -70,33 +86,20 @@ public class BoundedIntColumnWriter extends PrimitiveColumnWriter {
       newCurrentValue(val);
     }
   }
-  
+
   private void serializeCurrentValue() throws IOException {
     if (currentValueIsRepeated) {
-      serializedCt++;
       writeBit(true);
       writeBoundedInt(currentValue);
       Varint.writeSignedVarInt(currentValueCt, bytesData);
     } else {
       for (int i = 0; i < currentValueCt; i++) {
-        serializedCt++;
         writeBit(false);
         writeBoundedInt(currentValue);
       }
     }
   }
-  
-  private int currentByte = 0;
-  private int currentBytePosition = 0;
-  private static final int[] byteToTrueMask = new int[8];
-  static {
-    int currentMask = 1;
-    for (int i = 0; i < byteToTrueMask.length; i++) {
-      byteToTrueMask[i] = currentMask;
-      currentMask <<= 1;
-    }
-  }
-  
+
   private void writeBit(boolean bit) throws IOException {
     currentByte = setBytePosition(currentByte, currentBytePosition, bit);
     if (currentBytePosition == 8) {
@@ -105,7 +108,7 @@ public class BoundedIntColumnWriter extends PrimitiveColumnWriter {
       currentBytePosition = 0;
     }
   }
-  
+
   // The expectation is that the bounded value will be small. If it is > 2^24, then there are
   // going to be issues here. The schema require to make such a large bound, however, is
   // impractical.
@@ -115,6 +118,7 @@ public class BoundedIntColumnWriter extends PrimitiveColumnWriter {
     while (currentBytePosition > 8) {
       bytesData.write(currentByte); //this only writes the lowest byte
       currentBytePosition -= 8;
+      currentByte >>= 8;
     }
   }
 
@@ -123,10 +127,10 @@ public class BoundedIntColumnWriter extends PrimitiveColumnWriter {
     if (bit) {
       currentByte |= byteToTrueMask[currentBytePosition];
     }
-    
+
     return currentByte;
   }
-  
+
   private void newCurrentValue(int val) {
     currentValue = val;
     currentValueCt = 1;

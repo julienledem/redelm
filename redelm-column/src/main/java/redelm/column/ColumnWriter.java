@@ -18,7 +18,6 @@ package redelm.column;
 import java.io.IOException;
 
 public interface ColumnWriter {
-
   void write(int value, int repetitionLevel, int definitionLevel);
 
   void write(long value, int repetitionLevel, int definitionLevel);
@@ -44,5 +43,4 @@ public interface ColumnWriter {
   void reset();
 
   int getValueCount();
-
 }

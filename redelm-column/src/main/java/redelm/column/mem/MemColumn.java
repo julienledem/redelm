@@ -134,7 +134,7 @@ public class MemColumn {
 
     @Override
     protected void readCurrentValue() {
-        currentInt = dataColumn.readInt();
+        currentInt = dataColumn.readInteger();
     }
 
     @Override

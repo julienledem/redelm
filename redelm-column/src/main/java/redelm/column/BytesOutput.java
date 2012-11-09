@@ -21,9 +21,7 @@ import java.io.OutputStream;
 
 import org.apache.commons.codec.binary.Base64;
 
-//TODO compare to implementation in DataOutputStream, just in case
 public abstract class BytesOutput extends OutputStream implements DataOutput {
-
   public abstract void write(byte[] bytes, int index, int length) throws IOException;
 
   @Override
@@ -115,6 +113,8 @@ public abstract class BytesOutput extends OutputStream implements DataOutput {
   //TODO bring it to parity
   @Override
   public void writeUTF(String s) throws IOException {
-    write(Base64.encodeBase64(s.getBytes()));
+    byte[] bytes = Base64.encodeBase64(s.getBytes());
+    writeInt(bytes.length);
+    write(bytes);
   }
 }
