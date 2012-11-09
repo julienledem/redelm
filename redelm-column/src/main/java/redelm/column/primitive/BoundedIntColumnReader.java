@@ -10,10 +10,11 @@ public class BoundedIntColumnReader extends PrimitiveColumnReader {
   private ByteArrayInputStream bytes;
   private DataInputStream bytesData;
   private int currentValueCt = 0;
-  private int currentValue = -1;
-  private int bound = 0;
+  private int currentValue = 0;
   private boolean currentValueIsRepeated = false;
   private static final int[] byteGetValueMask = new int[8];
+  private int bitsPerValue = 0;
+  private int bound;
   static {
     int currentMask = 1;
     for (int i = 0; i < byteGetValueMask.length; i++) {
@@ -40,13 +41,12 @@ public class BoundedIntColumnReader extends PrimitiveColumnReader {
       }
       currentValueIsRepeated = readBit();
       if (currentValueIsRepeated) {
-        readBoundedInt(bound);
-        currentValueCt = Varint.readSignedVarInt(bytesData);
+        readBoundedInt();
+        currentValueCt = Varint.readSignedVarInt(bytesData) - 1;
       } else {
-        readBoundedInt(bound);
-        currentValueCt = 1;
+        readBoundedInt();
       }
-      return 0;
+      return currentValue;
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
@@ -57,23 +57,24 @@ public class BoundedIntColumnReader extends PrimitiveColumnReader {
 
   private boolean readBit() throws IOException {
     if (currentPosition == 8) {
-      currentByte = (byte)bytesData.readByte();
+      currentByte = bytesData.readUnsignedByte();
       currentPosition = 0;
     }
     return getBytePosition(currentByte, currentPosition++);
   }
 
-  private void readBoundedInt(int bound) throws IOException {
+  private void readBoundedInt() throws IOException {
+    int bits = bitsPerValue;
     currentValue = currentByte >> currentPosition;
     int toShift = currentPosition;
-    while (bound >= 8) {
+    while (bits >= 8) {
       currentByte = bytesData.read();
       currentValue |= currentByte << toShift;
       toShift += 8;
-      bound -= 8;
+      bits -= 8;
     }
-    currentValue &= readMask[bound + currentPosition];
-    currentPosition = (bound + currentPosition) % 8;
+    currentValue &= readMask[bitsPerValue + currentPosition];
+    currentPosition = (bitsPerValue + currentPosition) % 8;
   }
 
   private boolean getBytePosition(int val, int position) {
@@ -87,6 +88,7 @@ public class BoundedIntColumnReader extends PrimitiveColumnReader {
   @Override
   public void readStripe(DataInputStream in) throws IOException {
     bound = Varint.readSignedVarInt(in);
+    bitsPerValue = (int)Math.ceil(Math.log(bound + 1)/Math.log(2));
     int totalBytes = Varint.readSignedVarInt(in);
     if (totalBytes > 0) {
       byte[] buf = new byte[totalBytes];
