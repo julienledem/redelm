@@ -23,9 +23,10 @@ public class BoundedIntColumnWriter extends PrimitiveColumnWriter {
   private int shouldRepeatThreshold = 0;
   private ByteArrayOutputStream bytes = new ByteArrayOutputStream();
   private DataOutputStream bytesData = new DataOutputStream(bytes);
-  private int bound;
   private int currentByte = 0;
   private int currentBytePosition = 0;
+  private int bitsPerValue;
+  private boolean isFirst = true;
   private static final int[] byteToTrueMask = new int[8];
   static {
     int currentMask = 1;
@@ -36,8 +37,10 @@ public class BoundedIntColumnWriter extends PrimitiveColumnWriter {
   }
 
   public BoundedIntColumnWriter(int bound) {
-    this.bound = bound;
-    int bitsPerValue = (int)Math.ceil(Math.log(bound + 1)/Math.log(2));
+    if (bound == 0) {
+      throw new RuntimeException("Value bound cannot be 0. Use DevNullColumnWriter instead.");
+    }
+    bitsPerValue = (int)Math.ceil(Math.log(bound + 1)/Math.log(2));
     shouldRepeatThreshold = (bitsPerValue + 9)/(1 + bitsPerValue);
   }
 
@@ -50,12 +53,12 @@ public class BoundedIntColumnWriter extends PrimitiveColumnWriter {
   @Override
   public void writeData(DataOutput out) throws IOException {
     serializeCurrentValue();
+    writeCachedByte();
     bytesData.close();
     byte[] buf = bytes.toByteArray();
     // We serialize the length so that on deserialization we can
     // deserialize as we go, instead of having to load everything
     // into memory
-    Varint.writeSignedVarInt(bound, out);
     Varint.writeSignedVarInt(buf.length, out);
     out.write(buf);
     reset();
@@ -68,6 +71,9 @@ public class BoundedIntColumnWriter extends PrimitiveColumnWriter {
     currentValueIsRepeated = false;
     bytes = new ByteArrayOutputStream();
     bytesData = new DataOutputStream(bytes);
+    isFirst = true;
+    currentByte = 0;
+    currentBytePosition = 0;
   }
 
   @Override
@@ -79,7 +85,11 @@ public class BoundedIntColumnWriter extends PrimitiveColumnWriter {
       }
     } else {
       try {
-        serializeCurrentValue();
+        if (!isFirst) {
+          serializeCurrentValue();
+        } else {
+          isFirst = false;
+        }
       } catch (IOException e) {
         throw new RuntimeException("Error serializing current value: " + currentValue, e);
       }
@@ -91,7 +101,7 @@ public class BoundedIntColumnWriter extends PrimitiveColumnWriter {
     if (currentValueIsRepeated) {
       writeBit(true);
       writeBoundedInt(currentValue);
-      Varint.writeSignedVarInt(currentValueCt, bytesData);
+      writeSignedVarInt(currentValueCt);
     } else {
       for (int i = 0; i < currentValueCt; i++) {
         writeBit(false);
@@ -100,12 +110,34 @@ public class BoundedIntColumnWriter extends PrimitiveColumnWriter {
     }
   }
 
+  //consider doing "unsigned" values and just not allowing 2^32. That's unlikely and it will compress things much more
+  private void writeSignedVarInt(int value) throws IOException {
+    value = (value << 1) ^ (value >> 31);
+    while ((value & 0xFFFFFF80) != 0L) {
+      writeLocalByte((value & 0x7F) | 0x80);
+      value >>>= 7;
+    }
+    writeLocalByte(value & 0x7F);
+  }
+
+  private void writeLocalByte(int val) throws IOException {
+    currentByte |= ((val & 0xFF) << currentBytePosition);
+    bytesData.writeByte(currentByte);
+    currentByte >>>= 8;
+  }
+
   private void writeBit(boolean bit) throws IOException {
-    currentByte = setBytePosition(currentByte, currentBytePosition, bit);
+    currentByte = setBytePosition(currentByte, currentBytePosition++, bit);
     if (currentBytePosition == 8) {
       bytesData.write(currentByte);
       currentByte = 0;
       currentBytePosition = 0;
+    }
+  }
+
+  private void writeCachedByte() throws IOException {
+    if (currentBytePosition > 0) {
+      bytesData.write(currentByte);
     }
   }
 
@@ -114,12 +146,14 @@ public class BoundedIntColumnWriter extends PrimitiveColumnWriter {
   // impractical.
   private void writeBoundedInt(int val) throws IOException {
     val <<= currentBytePosition;
+    int upperByte = currentBytePosition + bitsPerValue;
     currentByte |= val;
-    while (currentBytePosition > 8) {
+    while (upperByte >= 8) {
       bytesData.write(currentByte); //this only writes the lowest byte
-      currentBytePosition -= 8;
-      currentByte >>= 8;
+      upperByte -= 8;
+      currentByte >>>= 8;
     }
+    currentBytePosition = (currentBytePosition + bitsPerValue) % 8;
   }
 
   // This assumes that the default is all false ie 0

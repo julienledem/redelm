@@ -2,6 +2,7 @@ package redelm.column.primitive;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
+import java.io.EOFException;
 import java.io.IOException;
 
 import redelm.utils.Varint;
@@ -13,7 +14,6 @@ public class BoundedIntColumnReader extends PrimitiveColumnReader {
   private int currentValue = 0;
   private static final int[] byteGetValueMask = new int[8];
   private int bitsPerValue = 0;
-  private int bound;
   static {
     int currentMask = 1;
     for (int i = 0; i < byteGetValueMask.length; i++) {
@@ -31,6 +31,13 @@ public class BoundedIntColumnReader extends PrimitiveColumnReader {
     }
   }
 
+  public BoundedIntColumnReader(int bound) {
+    if (bound == 0) {
+      throw new RuntimeException("Value bound cannot be 0. Use DevNullColumnReader instead.");
+    }
+    bitsPerValue = (int)Math.ceil(Math.log(bound + 1)/Math.log(2));
+  }
+
   @Override
   public int readInteger() {
     try {
@@ -40,7 +47,7 @@ public class BoundedIntColumnReader extends PrimitiveColumnReader {
       }
       if (readBit()) {
         readBoundedInt();
-        currentValueCt = Varint.readSignedVarInt(bytesData) - 1;
+        currentValueCt = readSignedVarInt() - 1;
       } else {
         readBoundedInt();
       }
@@ -48,6 +55,33 @@ public class BoundedIntColumnReader extends PrimitiveColumnReader {
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
+  }
+
+  private int readSignedVarInt() throws IOException {
+    int value = 0;
+    int i = 0;
+    int b;
+    while (((b = readLocalByte()) & 0x80) != 0) {
+        value |= (b & 0x7F) << i;
+        i += 7;
+        if (i > 35) {
+            throw new RuntimeException("Variable length quantity is too long");
+        }
+    }
+    int raw = value | (b << i);
+    int temp = (((raw << 31) >> 31) ^ raw) >> 1;
+    return temp ^ (raw & (1 << 31));
+  }
+
+  private int readLocalByte() throws IOException {
+    try {
+      currentByte |= (bytesData.readUnsignedByte() << 8);
+    } catch (EOFException e) {
+      //TODO
+    }
+    int value = (currentByte >>> currentPosition) & 0xFF;
+    currentByte >>>= 8;
+    return value;
   }
 
   private int currentByte = 0;
@@ -62,16 +96,20 @@ public class BoundedIntColumnReader extends PrimitiveColumnReader {
   }
 
   private void readBoundedInt() throws IOException {
-    int bits = bitsPerValue;
-    currentValue = currentByte >> currentPosition;
-    int toShift = currentPosition;
+    int bits = bitsPerValue + currentPosition;
+    currentValue = currentByte >>> currentPosition;
+    int toShift = 8 - currentPosition;
     while (bits >= 8) {
-      currentByte = bytesData.read();
+      try {
+        currentByte = bytesData.readUnsignedByte();
+      } catch (EOFException e) {
+        //TODO
+      }
       currentValue |= currentByte << toShift;
       toShift += 8;
       bits -= 8;
     }
-    currentValue &= readMask[bitsPerValue + currentPosition];
+    currentValue &= readMask[bitsPerValue];
     currentPosition = (bitsPerValue + currentPosition) % 8;
   }
 
@@ -85,8 +123,6 @@ public class BoundedIntColumnReader extends PrimitiveColumnReader {
   // to BoundedIntColumnWriter.writeData(BytesOutput)
   @Override
   public void readStripe(DataInputStream in) throws IOException {
-    bound = Varint.readSignedVarInt(in);
-    bitsPerValue = (int)Math.ceil(Math.log(bound + 1)/Math.log(2));
     int totalBytes = Varint.readSignedVarInt(in);
     if (totalBytes > 0) {
       byte[] buf = new byte[totalBytes];
@@ -95,9 +131,5 @@ public class BoundedIntColumnReader extends PrimitiveColumnReader {
       bytesData = new DataInputStream(bytes);
     }
     currentPosition = 8;
-  }
-
-  public int getBound() {
-    return bound;
   }
 }
