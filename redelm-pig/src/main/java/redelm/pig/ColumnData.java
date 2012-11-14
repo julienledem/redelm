@@ -20,9 +20,9 @@ import java.util.Arrays;
 public class ColumnData {
 
   private final String[] path;
-  private byte[] repetitionLevels;
-  private byte[] definitionLevels;
-  private byte[] data;
+  private final byte[] repetitionLevels;
+  private final byte[] definitionLevels;
+  private final byte[] data;
 
   public ColumnData(String[] path,
       byte[] repetitionLevels, byte[] definitionLevels, byte[] data) {

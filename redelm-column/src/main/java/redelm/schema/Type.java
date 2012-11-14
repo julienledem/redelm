@@ -76,4 +76,10 @@ abstract public class Type {
     }
     return typeEquals((Type)other);
   }
+
+  protected abstract int getRepetitionLevel(String[] path, int i);
+
+  protected abstract int getDefinitionLevel(String[] path, int i);
+
+  protected abstract Type getType(String[] path, int i);
 }

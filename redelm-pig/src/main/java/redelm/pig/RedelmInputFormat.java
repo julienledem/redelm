@@ -55,131 +55,134 @@ public class RedelmInputFormat extends PigFileInputFormat<Object, Tuple> {
       this.requestedSchema = requestedSchema == null ? null : MessageTypeParser.parseMessageType(requestedSchema);
   }
 
+  private class RedelmRecordReader extends RecordReader<Object, Tuple> {
+    private ColumnIOFactory columnIOFactory = new ColumnIOFactory();
+    private Map<String, ColumnMetaData> columnTypes = new HashMap<String, ColumnMetaData>();
+
+    private MessageType schema;
+
+    private Tuple currentTuple;
+    private int total;
+    private int current;
+
+    private RedelmFileReader reader;
+    private List<Tuple> destination = new LinkedList<Tuple>();
+    private redelm.io.RecordReader recordReader;
+    private MemColumnsStore columnsStore;
+    private TupleRecordConsumer recordConsumer;
+    private FSDataInputStream f;
+    private Schema pigSchema;
+
+    private void checkRead() throws IOException {
+      if(columnsStore == null || columnsStore.isFullyConsumed()) {
+        columnsStore = new MemColumnsStore(0, schema);
+        BlockData readColumns = reader.readColumns();
+        if (readColumns == null) {
+          return;
+        }
+        for (ColumnData columnData : readColumns.getColumns()) {
+          ColumnMetaData columnMetaData = columnTypes.get(Arrays.toString(columnData.getPath()));
+          columnsStore.setForRead(
+              columnData.getPath(),
+              columnMetaData.getType(),
+              columnMetaData.getValueCount(),
+              columnData.getRepetitionLevels(),
+              columnData.getDefinitionLevels(),
+              columnData.getData()
+              );
+        }
+        MessageColumnIO columnIO = columnIOFactory.getColumnIO(requestedSchema, columnsStore);
+        recordReader = columnIO.getRecordReader();
+        recordConsumer = new TupleRecordConsumer(requestedSchema, pigSchema, destination);
+      }
+    }
+
+    @Override
+    public void close() throws IOException {
+      f.close();
+    }
+
+    @Override
+    public Object getCurrentKey() throws IOException,
+    InterruptedException {
+      return null;
+    }
+
+    @Override
+    public Tuple getCurrentValue() throws IOException,
+    InterruptedException {
+      return currentTuple;
+    }
+
+    @Override
+    public float getProgress() throws IOException, InterruptedException {
+      return (float)current/total;
+    }
+
+    @Override
+    public void initialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
+        throws IOException, InterruptedException {
+      FileSystem fs = FileSystem.get(taskAttemptContext.getConfiguration());
+      RedelmInputSplit redelmInputSplit = (RedelmInputSplit)inputSplit;
+      Path path = redelmInputSplit.getPath();
+      schema = MessageTypeParser.parseMessageType(redelmInputSplit.getSchema());
+      pigSchema = Utils.getSchemaFromString(redelmInputSplit.getPigSchema());
+      if (requestedSchema == null) {
+        requestedSchema = schema;
+      }
+      f = fs.open(path);
+      BlockMetaData block = redelmInputSplit.getBlock();
+      List<String[]> columns = new ArrayList<String[]>();
+      for (ColumnMetaData columnMetaData : block.getColumns()) {
+        columnTypes.put(Arrays.toString(columnMetaData.getPath()), columnMetaData);
+        if (contains(requestedSchema, columnMetaData.getPath())) {
+          columns.add(columnMetaData.getPath());
+        }
+      }
+      reader = new RedelmFileReader(f, Arrays.asList(block), columns, redelmInputSplit.getCodecClassName());
+      total = block.getRecordCount();
+    }
+
+    private boolean contains(GroupType requestedSchema, String[] path) {
+      return contains(requestedSchema, path, 0);
+    }
+
+    private boolean contains(GroupType group, String[] path, int index) {
+      if (index == path.length) {
+        return false;
+      }
+      if (group.containsField(path[index])) {
+        Type type = group.getType(path[index]);
+        if (type.isPrimitive()) {
+          return index + 1 == path.length;
+        } else {
+          return contains(type.asGroupType(), path, index + 1);
+        }
+      }
+      return false;
+    }
+
+    @Override
+    public boolean nextKeyValue() throws IOException, InterruptedException {
+      checkRead();
+      if (destination.size() == 0 && current<total) {
+        recordReader.read(recordConsumer);
+      }
+      if (destination.size() == 0) {
+        currentTuple = null;
+        return false;
+      }
+      current ++;
+      currentTuple = destination.remove(0);
+      return true;
+    }
+  }
+
   @Override
   public RecordReader<Object, Tuple> createRecordReader(
       InputSplit inputSplit,
       TaskAttemptContext taskAttemptContext) throws IOException, InterruptedException {
-    return new RecordReader<Object, Tuple>() {
-      private ColumnIOFactory columnIOFactory = new ColumnIOFactory();
-      private Map<String, ColumnMetaData> columnTypes = new HashMap<String, ColumnMetaData>();
-
-      private MessageType schema;
-
-      private Tuple currentTuple;
-      private int total;
-      private int current;
-
-      private RedelmFileReader reader;
-      private List<Tuple> destination = new LinkedList<Tuple>();
-      private redelm.io.RecordReader recordReader;
-      private MemColumnsStore columnsStore;
-      private TupleRecordConsumer recordConsumer;
-      private FSDataInputStream f;
-      private Schema pigSchema;
-
-      private void checkRead() throws IOException {
-        if(columnsStore == null || columnsStore.isFullyConsumed()) {
-          columnsStore = new MemColumnsStore(0);
-          BlockData readColumns = reader.readColumns();
-          if (readColumns == null) {
-            return;
-          }
-          for (ColumnData columnData : readColumns.getColumns()) {
-            ColumnMetaData columnMetaData = columnTypes.get(Arrays.toString(columnData.getPath()));
-            columnsStore.setForRead(
-                columnData.getPath(), columnMetaData.getType(),
-                columnMetaData.getValueCount(),
-                columnData.getRepetitionLevels(),
-                columnData.getDefinitionLevels(),
-                columnData.getData()
-                );
-          }
-          MessageColumnIO columnIO = columnIOFactory.getColumnIO(requestedSchema, columnsStore);
-          recordReader = columnIO.getRecordReader();
-          recordConsumer = new TupleRecordConsumer(requestedSchema, pigSchema, destination);
-        }
-      }
-
-      @Override
-      public void close() throws IOException {
-        f.close();
-      }
-
-      @Override
-      public Object getCurrentKey() throws IOException,
-      InterruptedException {
-        return null;
-      }
-
-      @Override
-      public Tuple getCurrentValue() throws IOException,
-      InterruptedException {
-        return currentTuple;
-      }
-
-      @Override
-      public float getProgress() throws IOException, InterruptedException {
-        return (float)current/total;
-      }
-
-      @Override
-      public void initialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
-          throws IOException, InterruptedException {
-        FileSystem fs = FileSystem.get(taskAttemptContext.getConfiguration());
-        RedelmInputSplit redelmInputSplit = (RedelmInputSplit)inputSplit;
-        Path path = redelmInputSplit.getPath();
-        schema = MessageTypeParser.parseMessageType(redelmInputSplit.getSchema());
-        pigSchema = Utils.getSchemaFromString(redelmInputSplit.getPigSchema());
-        if (requestedSchema == null) {
-          requestedSchema = schema;
-        }
-        f = fs.open(path);
-        BlockMetaData block = redelmInputSplit.getBlock();
-        List<String[]> columns = new ArrayList<String[]>();
-        for (ColumnMetaData columnMetaData : block.getColumns()) {
-          columnTypes.put(Arrays.toString(columnMetaData.getPath()), columnMetaData);
-          if (contains(requestedSchema, columnMetaData.getPath())) {
-            columns.add(columnMetaData.getPath());
-          }
-        }
-        reader = new RedelmFileReader(f, Arrays.asList(block), columns, redelmInputSplit.getCodecClassName());
-        total = block.getRecordCount();
-      }
-
-      private boolean contains(GroupType requestedSchema, String[] path) {
-        return contains(requestedSchema, path, 0);
-      }
-
-      private boolean contains(GroupType group, String[] path, int index) {
-        if (index == path.length) {
-          return false;
-        }
-        if (group.containsField(path[index])) {
-          Type type = group.getType(path[index]);
-          if (type.isPrimitive()) {
-            return index + 1 == path.length;
-          } else {
-            return contains(type.asGroupType(), path, index + 1);
-          }
-        }
-        return false;
-      }
-
-      @Override
-      public boolean nextKeyValue() throws IOException, InterruptedException {
-        checkRead();
-        if (destination.size() == 0 && current<total) {
-          recordReader.read(recordConsumer);
-        }
-        if (destination.size() == 0) {
-          currentTuple = null;
-          return false;
-        }
-        current ++;
-        currentTuple = destination.remove(0);
-        return true;
-      }
-    };
+    return new RedelmRecordReader();
   }
 
   @Override

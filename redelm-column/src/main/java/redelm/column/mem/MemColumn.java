@@ -293,5 +293,4 @@ public class MemColumn {
       return String.valueOf(current);
     }
   }
-
 }
