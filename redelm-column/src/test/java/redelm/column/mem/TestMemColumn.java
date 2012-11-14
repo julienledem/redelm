@@ -24,14 +24,14 @@ import redelm.column.ColumnReader;
 import redelm.column.ColumnWriter;
 import redelm.parser.MessageTypeParser;
 import redelm.schema.MessageType;
-import redelm.schema.PrimitiveType.Primitive;
 
 public class TestMemColumn {
   @Test
   public void testMemColumn() throws Exception {
     System.out.println("<<<");
-    MemColumnsStore memColumnsStore = new MemColumnsStore(1024);
-    ColumnDescriptor path = new ColumnDescriptor(new String[]{"foo", "bar"}, Primitive.INT64);
+    MessageType mt = MessageTypeParser.parseMessageType("message msg { require group foo { required i64 bar; } }");
+    MemColumnsStore memColumnsStore = new MemColumnsStore(1024, mt);
+    ColumnDescriptor path = mt.getColumnDescription(new String[]{"foo", "bar"});
     ColumnWriter columnWriter = memColumnsStore.getColumnWriter(path);
     columnWriter.write(42l, 0, 0);
     memColumnsStore.flip();

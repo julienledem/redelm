@@ -33,7 +33,6 @@ import java.util.List;
 
 import org.junit.Test;
 
-import redelm.Log;
 import redelm.column.BytesOutput;
 import redelm.column.ColumnDescriptor;
 import redelm.column.ColumnReader;
@@ -90,7 +89,7 @@ public class TestColumnIO {
     System.out.println("r2");
     System.out.println(r2);
 
-    ColumnsStore columns = new MemColumnsStore(1024);
+    ColumnsStore columns = new MemColumnsStore(1024, schema);
     {
       MessageColumnIO columnIO = new ColumnIOFactory().getColumnIO(schema, columns);
       System.out.println(columnIO);
@@ -155,7 +154,7 @@ public class TestColumnIO {
 
   @Test
   public void testPushParser() {
-    ColumnsStore columns = new MemColumnsStore(1024);
+    ColumnsStore columns = new MemColumnsStore(1024, schema);
     MessageColumnIO columnIO = new ColumnIOFactory().getColumnIO(schema, columns);
     new GroupWriter(columnIO.getRecordWriter(), schema).write(r1);
     columns.flip();
