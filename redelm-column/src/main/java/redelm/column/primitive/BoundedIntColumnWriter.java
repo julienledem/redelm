@@ -21,8 +21,8 @@ public class BoundedIntColumnWriter extends PrimitiveColumnWriter {
   private int shouldRepeatThreshold = 0;
   private int bitsPerValue;
   private BitWriter bitWriter = new BitWriter();
-
   private boolean isFirst = true;
+
   private static final int[] byteToTrueMask = new int[8];
   static {
     int currentMask = 1;
@@ -42,7 +42,11 @@ public class BoundedIntColumnWriter extends PrimitiveColumnWriter {
 
   @Override
   public int getMemSize() {
-    throw new RuntimeException("Need to implement getMemSize()");
+    // currentValue + currentValueCt = 8 bytes
+    // shouldRepeatThreshold + bitsPerValue = 8 bytes
+    // bitWriter = 8 bytes
+    // currentValueIsRepeated + isFirst = 2 bytes (rounded to 8 b/c of word boundaries)
+    return 32 + (bitWriter == null ? 0 : bitWriter.getMemSize());
   }
 
   // This assumes that the full state must be serialized, since there is no close method

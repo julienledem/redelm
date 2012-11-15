@@ -15,11 +15,12 @@
  */
 package redelm.column.mem;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.charset.Charset;
 
 import redelm.Log;
-import redelm.column.BytesOutput;
 import redelm.column.ColumnDescriptor;
 import redelm.column.ColumnReader;
 import redelm.column.ColumnWriter;
@@ -77,26 +78,28 @@ public class MemColumn {
     memColumnReader.setValueCount(valueCount);
   }
 
+  //TODO this is where we need to do the proper data reader
+  // writeRepetitionLevelColumn is super broken
   public void flip() {
     if (memColumnWriter != null) {
       try {
         memColumnReader = newMemColumnReader();
         memColumnReader.setValueCount(memColumnWriter.getValueCount());
-        memColumnWriter.writeRepetitionLevelColumn(new BytesOutput() {
-          public void write(byte[] bytes, int index, int length) throws IOException {
-            memColumnReader.initRepetitionLevelColumn(bytes, index, length);
-          }
-        });
-        memColumnWriter.writeDefinitionLevelColumn(new BytesOutput() {
-          public void write(byte[] bytes, int index, int length) throws IOException {
-            memColumnReader.initDefinitionLevelColumn(bytes, index, length);
-          }
-        });
-        memColumnWriter.writeDataColumn(new BytesOutput() {
-          public void write(byte[] bytes, int index, int length) throws IOException {
-            memColumnReader.initDataColumn(bytes, index, length);
-          }
-        });
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        memColumnWriter.writeRepetitionLevelColumn(new DataOutputStream(baos));
+        byte[] buf = baos.toByteArray();
+        memColumnReader.initRepetitionLevelColumn(buf, 0, buf.length);
+
+        baos = new ByteArrayOutputStream();
+        memColumnWriter.writeDefinitionLevelColumn(new DataOutputStream(baos));
+        buf = baos.toByteArray();
+        memColumnReader.initDefinitionLevelColumn(buf, 0, buf.length);
+
+        baos = new ByteArrayOutputStream();
+        memColumnWriter.writeDataColumn(new DataOutputStream(baos));
+        buf = baos.toByteArray();
+        memColumnReader.initDataColumn(buf, 0, buf.length);
       } catch (IOException e) {
         throw new RuntimeException(e);
       }

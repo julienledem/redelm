@@ -116,7 +116,7 @@ abstract class MemColumnReader implements ColumnReader {
     if (consumed && !isFullyConsumed()) {
       read();
     } else if (isFullyConsumed()) {
-      repetitionLevel = 0;
+      repetitionLevel = 0; //TODO q: do we not also set the definition level?
     }
   }
 
@@ -142,7 +142,7 @@ abstract class MemColumnReader implements ColumnReader {
   public void initDefinitionLevelColumn(byte[] bytes, int index, int length) {
     definitionLevelColumn = BoundedColumnFactory.getBoundedReader(path.getDefinitionLevel());
     try {
-      repetitionLevelColumn.readStripe(new DataInputStream(new ByteArrayInputStream(bytes, index, length)));
+      definitionLevelColumn.readStripe(new DataInputStream(new ByteArrayInputStream(bytes, index, length)));
     } catch (IOException e) {
       throw new RuntimeException(e);
     }

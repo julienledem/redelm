@@ -23,6 +23,7 @@ import static redelm.data.simple.example.Paper.r2;
 import static redelm.data.simple.example.Paper.schema;
 import static redelm.data.simple.example.Paper.schema2;
 
+import java.io.DataOutput;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.util.ArrayDeque;
@@ -33,7 +34,6 @@ import java.util.List;
 
 import org.junit.Test;
 
-import redelm.column.BytesOutput;
 import redelm.column.ColumnDescriptor;
 import redelm.column.ColumnReader;
 import redelm.column.ColumnWriter;
@@ -398,19 +398,19 @@ public class TestColumnIO {
           }
 
           @Override
-          public void writeRepetitionLevelColumn(BytesOutput out)
+          public void writeRepetitionLevelColumn(DataOutput out)
               throws IOException {
             throw new UnsupportedOperationException();
           }
 
           @Override
-          public void writeDefinitionLevelColumn(BytesOutput out)
+          public void writeDefinitionLevelColumn(DataOutput out)
               throws IOException {
             throw new UnsupportedOperationException();
           }
 
           @Override
-          public void writeDataColumn(BytesOutput out) throws IOException {
+          public void writeDataColumn(DataOutput out) throws IOException {
             throw new UnsupportedOperationException();
           }
 
