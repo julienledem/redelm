@@ -78,8 +78,6 @@ public class MemColumn {
     memColumnReader.setValueCount(valueCount);
   }
 
-  //TODO this is where we need to do the proper data reader
-  // writeRepetitionLevelColumn is super broken
   public void flip() {
     if (memColumnWriter != null) {
       try {

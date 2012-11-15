@@ -29,7 +29,7 @@ public class TestMemColumn {
   @Test
   public void testMemColumn() throws Exception {
     System.out.println("<<<");
-    MessageType mt = MessageTypeParser.parseMessageType("message msg { require group foo { required i64 bar; } }");
+    MessageType mt = MessageTypeParser.parseMessageType("message msg { required group foo { required int64 bar; } }");
     MemColumnsStore memColumnsStore = new MemColumnsStore(1024, mt);
     ColumnDescriptor path = mt.getColumnDescription(new String[]{"foo", "bar"});
     ColumnWriter columnWriter = memColumnsStore.getColumnWriter(path);
@@ -53,7 +53,7 @@ public class TestMemColumn {
   @Test
   public void testMemColumnString() throws Exception {
     System.out.println("<<<");
-    MessageType mt = MessageTypeParser.parseMessageType("message msg { require group foo { required string bar; } }");
+    MessageType mt = MessageTypeParser.parseMessageType("message msg { required group foo { required string bar; } }");
     MemColumnsStore memColumnsStore = new MemColumnsStore(1024, mt);
     ColumnDescriptor path = mt.getColumnDescription(new String[]{"foo", "bar"});
     ColumnWriter columnWriter = memColumnsStore.getColumnWriter(path);

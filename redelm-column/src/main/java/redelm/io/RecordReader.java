@@ -106,16 +106,7 @@ public class RecordReader {
     do {
       ColumnReader columnReader = columns[currentCol];
       PrimitiveColumnIO primitiveColumnIO = leaves[currentCol];
-      int d = 0;//TODO remove
-      try {//TODO remove
-        id++; //TODO remove
-        if (id == 25) {//TODO remove
-          System.out.print("");//TODO remove
-        }//TODO remove
-        d = columnReader.getCurrentDefinitionLevel();
-      } catch (Exception e) {//TODO remove
-        throw new RuntimeException(e);//TODO remove
-      }//TODO remove
+      int d = columnReader.getCurrentDefinitionLevel();
       // creating needed nested groups until the current field (opening tags)
       for (; currentLevel < (primitiveColumnIO.getFieldPath().length - 1)
           && d > currentNodePath[currentLevel].getDefinitionLevel(); ++currentLevel) {
