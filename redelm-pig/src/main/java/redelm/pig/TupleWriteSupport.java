@@ -27,27 +27,33 @@ import org.apache.pig.data.DataByteArray;
 import org.apache.pig.data.Tuple;
 import org.apache.pig.data.TupleFactory;
 
+import redelm.hadoop.MetaDataBlock;
+import redelm.hadoop.WriteSupport;
 import redelm.io.RecordConsumer;
 import redelm.schema.GroupType;
 import redelm.schema.MessageType;
 import redelm.schema.Type;
 import redelm.schema.Type.Repetition;
 
-public class TupleWriter {
+public class TupleWriteSupport extends WriteSupport<Tuple> {
   private static final TupleFactory TF = TupleFactory.getInstance();
 
-  private final RecordConsumer recordConsumer;
-  private final MessageType rootSchema;
+  private RecordConsumer recordConsumer;
+  private MessageType rootSchema;
 
-  public TupleWriter(RecordConsumer recordConsumer, MessageType schema) {
+  public void initForWrite(RecordConsumer recordConsumer, MessageType schema, List<MetaDataBlock> extraMetaData) {
     this.recordConsumer = recordConsumer;
     this.rootSchema = schema;
   }
 
-  public void write(Tuple t) throws ExecException {
-    recordConsumer.startMessage();
-    writeTuple(rootSchema, t);
-    recordConsumer.endMessage();
+  public void write(Tuple t) {
+    try {
+      recordConsumer.startMessage();
+      writeTuple(rootSchema, t);
+      recordConsumer.endMessage();
+    } catch (ExecException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   private void writeTuple(GroupType schema, Tuple t) throws ExecException {
@@ -73,6 +79,7 @@ public class TupleWriter {
               recordConsumer.endField(fieldType.getName(), i);
             }
           } else if (repeated instanceof Map) {
+            @SuppressWarnings("unchecked") // I know
             Map<String, Object> map = (Map<String, Object>)repeated;
             if (map.size() > 0) {
               recordConsumer.startField(fieldType.getName(), i);

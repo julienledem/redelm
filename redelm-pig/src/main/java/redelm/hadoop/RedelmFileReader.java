@@ -13,17 +13,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package redelm.pig;
+package redelm.hadoop;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.ObjectInputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+
+import redelm.Log;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -33,12 +34,36 @@ import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionInputStream;
 import org.apache.hadoop.io.compress.Decompressor;
 import org.apache.hadoop.util.ReflectionUtils;
-import org.apache.log4j.Logger;
 
+/**
+ * Reads a RedElm file
+ * @author Julien Le Dem
+ *
+ */
 public class RedelmFileReader {
-  private static final Logger LOG = Logger.getLogger(RedelmFileReader.class);
+  private static final Log LOG = Log.getLog(RedelmFileReader.class);
 
-  public static final Footer readFooter(FSDataInputStream f, long l) throws IOException {
+  private static List<MetaDataBlock> readMetaDataBlocks(FSDataInputStream f) throws IOException {
+    List<MetaDataBlock> blocks = new ArrayList<MetaDataBlock>();
+    int blockCount =  f.read();
+    for (int i = 0; i < blockCount; i++) {
+      String name = f.readUTF();
+      byte[] data = new byte[f.readInt()];
+      f.readFully(data);
+      blocks.add(new MetaDataBlock(name, data));
+    }
+    return blocks;
+  }
+
+  /**
+   * Reads the meta data block in the footer of the file
+   * @see RedelmMetaData#fromMetaDataBlocks(List)
+   * @param f the RedElm File
+   * @param l the length of the file
+   * @return the metadata blocks in the footer
+   * @throws IOException if an error occurs while reading the file
+   */
+  public static final List<MetaDataBlock> readFooter(FSDataInputStream f, long l) throws IOException {
     if (l <= 3 * 8) { // MAGIC (8) + data + footer + footerIndex (8) + MAGIC (8)
       throw new RuntimeException("Not a Red Elm file");
     }
@@ -59,12 +84,9 @@ public class RedelmFileReader {
           "unsupported version: " + version + ". " +
           "supporting up to " + RedelmFileWriter.CURRENT_VERSION);
     }
-//    Footer footer = Footer.fromJSON(f.readUTF());
-    try {
-      return (Footer) new ObjectInputStream(f).readObject();
-    } catch (ClassNotFoundException e) {
-      throw new IOException("Can not deserialize footer", e);
-    }
+
+    return readMetaDataBlocks(f);
+
   }
 
   private final List<BlockMetaData> blocks;
@@ -74,21 +96,37 @@ public class RedelmFileReader {
   private long previousReadIndex = 0;
   private final CompressionCodec codec;
 
+  /**
+   *
+   * @param f the redelm file
+   * @param blocks the blocks to read
+   * @param colums the columns to read (their path)
+   * @param codecClassName the codec used to compress the blocks
+   */
   public RedelmFileReader(FSDataInputStream f, List<BlockMetaData> blocks, List<String[]> colums, String codecClassName) {
     this.f = f;
     this.blocks = blocks;
     for (String[] path : colums) {
       paths.add(Arrays.toString(path));
     }
-    try {
-      Class<?> codecClass = Class.forName(codecClassName);
-      Configuration conf = new Configuration();
-      codec = (CompressionCodec)ReflectionUtils.newInstance(codecClass, conf);
-    } catch (ClassNotFoundException e) {
-      throw new RuntimeException("Should not happen", e);
+    if (codecClassName == null) {
+      this.codec = null;
+    } else {
+      try {
+        Class<?> codecClass = Class.forName(codecClassName);
+        Configuration conf = new Configuration();
+        this.codec = (CompressionCodec)ReflectionUtils.newInstance(codecClass, conf);
+      } catch (ClassNotFoundException e) {
+        throw new RuntimeException("Should not happen", e);
+      }
     }
   }
 
+  /**
+   * reads all the columns requested in the next block
+   * @return the block data for the next block
+   * @throws IOException if an error occurs while reading
+   */
   public BlockData readColumns() throws IOException {
     if (currentBlock == blocks.size()) {
       return null;
@@ -118,17 +156,23 @@ public class RedelmFileReader {
     f.readFully(start, data);
     long t1 = System.currentTimeMillis();
     LOG.info("Read " + length + " bytes for column " + name + " in " + (t1 - t0) + " ms: " + (float)(t1 - t0)/data.length + " ms/byte");
-    // TODO make this streaming instead of reading into an array to decompress
-    Decompressor decompressor = CodecPool.getDecompressor(codec);
-    try {
-      CompressionInputStream cis = codec.createInputStream(new ByteArrayInputStream(data), decompressor);
-      ByteArrayOutputStream decompressed = new ByteArrayOutputStream();
-      IOUtils.copyBytes(cis, decompressed, 4096, false);
-      previousReadIndex = start + length;
-      return decompressed.toByteArray();
-    } finally {
-      CodecPool.returnDecompressor(decompressor);
+    byte[] result;
+    if (codec == null) {
+      result = data;
+    } else {
+      Decompressor decompressor = CodecPool.getDecompressor(codec);
+      try {
+        // TODO make this streaming instead of reading into an array to decompress
+        CompressionInputStream cis = codec.createInputStream(new ByteArrayInputStream(data), decompressor);
+        ByteArrayOutputStream decompressed = new ByteArrayOutputStream();
+        IOUtils.copyBytes(cis, decompressed, 4096, false);
+        result = decompressed.toByteArray();
+      } finally {
+        CodecPool.returnDecompressor(decompressor);
+      }
     }
+    previousReadIndex = start + length;
+    return result;
   }
 
 }

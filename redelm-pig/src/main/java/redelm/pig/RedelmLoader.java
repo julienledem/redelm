@@ -17,6 +17,8 @@ package redelm.pig;
 
 import java.io.IOException;
 
+import redelm.hadoop.RedelmInputFormat;
+
 import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.RecordReader;
@@ -28,7 +30,7 @@ import org.apache.pig.impl.util.Utils;
 
 public class RedelmLoader extends LoadFunc {
 
-  private RecordReader<Object, Tuple> reader;
+  private RecordReader<Void, Tuple> reader;
   private final String schema;
 
   public RedelmLoader() {
@@ -45,8 +47,9 @@ public class RedelmLoader extends LoadFunc {
   }
 
   @Override
-  public InputFormat<Object, Tuple> getInputFormat() throws IOException {
-    return new RedelmInputFormat(
+  public InputFormat<Void, Tuple> getInputFormat() throws IOException {
+    return new RedelmInputFormat<Tuple>(
+        TupleReadSupport.class,
         schema == null ? null :
         new PigSchemaConverter().convert(Utils.getSchemaFromString(schema)).toString());
   }

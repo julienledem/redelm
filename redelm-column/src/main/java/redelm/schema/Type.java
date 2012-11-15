@@ -56,8 +56,17 @@ abstract public class Type {
     return (PrimitiveType)this;
   }
 
+  /**
+   * writes a string representation to th eprovided StringBuilder
+   * @param sb the StringBuilder to write itself to
+   * @param current indentation level
+   */
   abstract public void writeToStringBuilder(StringBuilder sb, String indent);
 
+  /**
+   * to visit this type with the given visitor
+   * @param visitor the visitor to visit this type
+   */
   abstract public void accept(TypeVisitor visitor);
 
   @Override
@@ -82,4 +91,14 @@ abstract public class Type {
   protected abstract int getDefinitionLevel(String[] path, int i);
 
   protected abstract Type getType(String[] path, int i);
+
+  /**
+   * {@inheritDoc}
+   */
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    writeToStringBuilder(sb, "");
+    return sb.toString();
+  }
 }

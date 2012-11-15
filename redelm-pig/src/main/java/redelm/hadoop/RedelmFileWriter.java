@@ -13,10 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package redelm.pig;
+package redelm.hadoop;
 
 import static redelm.Log.INFO;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
 import java.util.ArrayList;
@@ -33,21 +34,23 @@ import org.apache.hadoop.io.compress.CodecPool;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionOutputStream;
 import org.apache.hadoop.io.compress.Compressor;
-import org.apache.hadoop.io.compress.GzipCodec;
 import org.apache.hadoop.util.ReflectionUtils;
 
+/**
+ * Writes a RedElm file
+ * @author Julien Le Dem
+ *
+ */
 public class RedelmFileWriter extends BytesOutput {
   public static final byte[] MAGIC = {82, 101, 100, 32, 69, 108, 109, 10}; // "Red Elm\n"
   public static final int CURRENT_VERSION = 1;
   private static final Log LOG = Log.getLog(RedelmFileWriter.class);
 
-  private final String codecClassName;
   private final CompressionCodec codec;
   private Compressor compressor;
   private CompressionOutputStream cos;
 
   private final MessageType schema;
-  private final String pigSchema;
   private final FSDataOutputStream out;
   private BlockMetaData currentBlock;
   private ColumnMetaData currentColumn;
@@ -56,6 +59,12 @@ public class RedelmFileWriter extends BytesOutput {
 
   private long uncompressedLength;
 
+  /**
+   * Captures the order in which methods should be called
+   *
+   * @author Julien Le Dem
+   *
+   */
   private enum STATE {
     NOT_STARTED {
       STATE start() {
@@ -123,32 +132,45 @@ public class RedelmFileWriter extends BytesOutput {
 
   private STATE state = STATE.NOT_STARTED;
 
-  public RedelmFileWriter(MessageType schema, String pigSchema, FSDataOutputStream out, String codecClassName) {
+  /**
+   *
+   * @param schema the schema of the data
+   * @param out the file to write to
+   * @param codec the codec to use to compress blocks
+   */
+  public RedelmFileWriter(MessageType schema, FSDataOutputStream out, CompressionCodec codec) {
     super();
     this.schema = schema;
-    this.pigSchema = pigSchema;
     this.out = out;
-    this.codecClassName = codecClassName;
-    try {
-      Class<?> codecClass = Class.forName(codecClassName);
-      Configuration conf = new Configuration();
-      codec = (CompressionCodec)ReflectionUtils.newInstance(codecClass, conf);
-    } catch (ClassNotFoundException e) {
-      throw new RuntimeException("Should not happen", e);
-    }
+    this.codec = codec;
   }
 
+  /**
+   * start the file
+   * @throws IOException
+   */
   public void start() throws IOException {
     state = state.start();
     out.write(MAGIC);
   }
 
+  /**
+   * start a block
+   * @param recordCount the record count in this block
+   * @throws IOException
+   */
   public void startBlock(int recordCount) throws IOException {
     state = state.startBlock();
     currentBlock = new BlockMetaData(out.getPos());
     currentRecordCount = recordCount;
   }
 
+  /**
+   * start a column inside a block
+   * @param descriptor the column descriptor
+   * @param valueCount the value count in this column
+   * @throws IOException
+   */
   public void startColumn(ColumnDescriptor descriptor, int valueCount) throws IOException {
     state = state.startColumn();
     currentColumn = new ColumnMetaData(descriptor.getPath(), descriptor.getType());
@@ -156,24 +178,36 @@ public class RedelmFileWriter extends BytesOutput {
   }
 
   private void startCompression() throws IOException {
-    compressor = CodecPool.getCompressor(codec);
-    cos = codec.createOutputStream(out, compressor);
-    uncompressedLength = 0;
+    if (codec != null) {
+      compressor = CodecPool.getCompressor(codec);
+      cos = codec.createOutputStream(out, compressor);
+      uncompressedLength = 0;
+    }
   }
 
   private void endCompression() throws IOException {
-    cos.finish();
-    cos = null;
-    CodecPool.returnCompressor(compressor);
-    compressor = null;
+    if (codec != null) {
+      cos.finish();
+      cos = null;
+      CodecPool.returnCompressor(compressor);
+      compressor = null;
+    }
   }
 
+  /**
+   * starts the repetitionLevels in this column
+   * @throws IOException
+   */
   public void startRepetitionLevels() throws IOException {
     state = state.startRepetition();
     currentColumn.setRepetitionStart(out.getPos());
     startCompression();
   }
 
+  /**
+   * ends the repetition levels and starts the definition levels in this column
+   * @throws IOException
+   */
   public void startDefinitionLevels() throws IOException {
     state = state.startDefinition();
     endCompression();
@@ -182,6 +216,10 @@ public class RedelmFileWriter extends BytesOutput {
     startCompression();
   }
 
+  /**
+   * ends the definition levels and starts the data in this column
+   * @throws IOException
+   */
   public void startData() throws IOException {
     state = state.startData();
     endCompression();
@@ -190,12 +228,26 @@ public class RedelmFileWriter extends BytesOutput {
     startCompression();
   }
 
+  /**
+   * write binary representation of repetition, definition or data
+   * @param data array containing the data
+   * @param offset where to start reading from the data
+   * @param length how many bytes to read
+   */
   public void write(byte[] data, int offset, int length) throws IOException {
     state = state.write();
-    cos.write(data, offset, length);
+    if (codec == null) {
+      out.write(data, offset, length);
+    } else {
+      cos.write(data, offset, length);
+    }
     uncompressedLength += length;
   }
 
+  /**
+   * end a column (once all rep, def and data have been written)
+   * @throws IOException
+   */
   public void endColumn() throws IOException {
     state = state.endColumn();
     endCompression();
@@ -206,6 +258,10 @@ public class RedelmFileWriter extends BytesOutput {
     currentColumn = null;
   }
 
+  /**
+   * ends a block once all column have been written
+   * @throws IOException
+   */
   public void endBlock() throws IOException {
     state = state.endBlock();
     currentBlock.setEndIndex(out.getPos());
@@ -214,18 +270,39 @@ public class RedelmFileWriter extends BytesOutput {
     currentBlock = null;
   }
 
-  public void end() throws IOException {
+  /**
+   * ends a file once all blocks have been written
+   * @param metaDataBlocks the extra meta data blocks to write in the footer
+   * @throws IOException
+   */
+  public void end(List<MetaDataBlock> metaDataBlocks) throws IOException {
     state = state.end();
     long footerIndex = out.getPos();
     out.writeInt(CURRENT_VERSION);
-    Footer footer = new Footer(schema.toString(), pigSchema, codecClassName, blocks);
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    RedelmMetaData footer = new RedelmMetaData(new RedelmMetaData.FileMetaData(schema.toString(), codec == null ? null : codec.getClass().getName()), blocks);
 //    out.writeUTF(Footer.toJSON(footer));
     // lazy: use serialization
     // TODO: change that
-    new ObjectOutputStream(out).writeObject(footer);
+    new ObjectOutputStream(baos).writeObject(footer);
+    MetaDataBlock redelmFooter = new MetaDataBlock("RedElm", baos.toByteArray());
+    if (metaDataBlocks.size() > 254) {
+      throw new IllegalArgumentException("maximum of 255 metadata blocks in footer");
+    }
+    out.write(metaDataBlocks.size() + 1);
+    writeMetaDataBlock(redelmFooter);
+    for (MetaDataBlock metaDataBlock : metaDataBlocks) {
+      writeMetaDataBlock(metaDataBlock);
+    }
     out.writeLong(footerIndex);
     out.write(MAGIC);
     out.close();
+  }
+
+  private void writeMetaDataBlock(MetaDataBlock metaDataBlock) throws IOException {
+    out.writeUTF(metaDataBlock.getName());
+    out.writeInt(metaDataBlock.getData().length);
+    out.write(metaDataBlock.getData());
   }
 
 }
