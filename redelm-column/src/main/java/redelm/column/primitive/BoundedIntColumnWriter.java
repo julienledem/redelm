@@ -33,6 +33,7 @@ public class BoundedIntColumnWriter extends PrimitiveColumnWriter {
   private int currentValue = -1;
   private int currentValueCt = -1;
   private boolean currentValueIsRepeated = false;
+  private boolean thereIsABufferedValue = false;
   private int shouldRepeatThreshold = 0;
   private int bitsPerValue;
   private BitWriter bitWriter = new BitWriter();
@@ -74,7 +75,6 @@ public class BoundedIntColumnWriter extends PrimitiveColumnWriter {
     // into memory
     Varint.writeSignedVarInt(buf.length, out);
     out.write(buf);
-    reset();
   }
 
   @Override
@@ -108,21 +108,25 @@ public class BoundedIntColumnWriter extends PrimitiveColumnWriter {
   }
 
   private void serializeCurrentValue() throws IOException {
-    if (currentValueIsRepeated) {
-      bitWriter.writeBit(true);
-      bitWriter.writeBits(currentValue, bitsPerValue);
-      bitWriter.writeUnsignedVarint(currentValueCt);
-    } else {
-      for (int i = 0; i < currentValueCt; i++) {
-        bitWriter.writeBit(false);
+    if (thereIsABufferedValue) {
+      if (currentValueIsRepeated) {
+        bitWriter.writeBit(true);
         bitWriter.writeBits(currentValue, bitsPerValue);
+        bitWriter.writeUnsignedVarint(currentValueCt);
+      } else {
+        for (int i = 0; i < currentValueCt; i++) {
+          bitWriter.writeBit(false);
+          bitWriter.writeBits(currentValue, bitsPerValue);
+        }
       }
     }
+    thereIsABufferedValue = false;
   }
 
   private void newCurrentValue(int val) {
     currentValue = val;
     currentValueCt = 1;
     currentValueIsRepeated = false;
+    thereIsABufferedValue = true;
   }
 }

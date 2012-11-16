@@ -90,6 +90,7 @@ public class TestColumnIO {
     System.out.println(r2);
 
     ColumnsStore columns = new MemColumnsStore(1024, schema);
+
     {
       MessageColumnIO columnIO = new ColumnIOFactory().getColumnIO(schema, columns);
       System.out.println(columnIO);
@@ -118,7 +119,10 @@ public class TestColumnIO {
     }
     {
       columns.flip();
+
       MessageColumnIO columnIO2 = new ColumnIOFactory().getColumnIO(schema2, columns);
+
+
       List<Group> records = new ArrayList<Group>();
       RecordReader recordReader = columnIO2.getRecordReader();
 

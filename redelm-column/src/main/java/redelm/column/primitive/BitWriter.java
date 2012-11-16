@@ -24,6 +24,7 @@ public class BitWriter {
   private int currentBytePosition = 0;
   private static final int[] byteToTrueMask = new int[8];
   private static final int[] byteToFalseMask = new int[8];
+  private boolean finished = false;
   static {
     int currentMask = 1;
     for (int i = 0; i < byteToTrueMask.length; i++) {
@@ -61,17 +62,20 @@ public class BitWriter {
   }
 
   public byte[] finish() {
-    if (currentBytePosition > 0) {
-      baos.write(currentByte);
-    }
-    try {
-      baos.flush();
-    } catch (IOException e) {
-      // This shouldn't be possible as ByteArrayOutputStream
-      // uses OutputStream's flush, which is a noop
-      throw new RuntimeException(e);
+    if (!finished) {
+      if (currentBytePosition > 0) {
+        baos.write(currentByte);
+      }
+      try {
+        baos.flush();
+      } catch (IOException e) {
+        // This shouldn't be possible as ByteArrayOutputStream
+        // uses OutputStream's flush, which is a noop
+        throw new RuntimeException(e);
+      }
     }
     byte[] buf = baos.toByteArray();
+    finished = true;
     return buf;
   }
 
@@ -79,6 +83,7 @@ public class BitWriter {
     baos = new ByteArrayOutputStream();
     currentByte = 0;
     currentBytePosition = 0;
+    finished = false;
   }
 
   public static int setBytePosition(int currentByte, int currentBytePosition, boolean bit) {

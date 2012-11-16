@@ -65,6 +65,7 @@ public class TestBoundedColumns {
           }
         }
         bicw.writeData(dos);
+        bicw.reset();
       }
       dos.close();
 
