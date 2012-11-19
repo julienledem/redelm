@@ -116,7 +116,7 @@ abstract class MemColumnReader implements ColumnReader {
     if (consumed && !isFullyConsumed()) {
       read();
     } else if (isFullyConsumed()) {
-      repetitionLevel = 0; //TODO q: do we not also set the definition level?
+      repetitionLevel = 0;
     }
   }
 

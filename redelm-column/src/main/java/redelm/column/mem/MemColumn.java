@@ -84,6 +84,8 @@ public class MemColumn {
         memColumnReader = newMemColumnReader();
         memColumnReader.setValueCount(memColumnWriter.getValueCount());
 
+        //TODO we need a better pattern for moving the bytes around. As is, the bytes
+        // will be copied into the provided buffer, thus increasing the amount of memory.
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         memColumnWriter.writeRepetitionLevelColumn(new DataOutputStream(baos));
         byte[] buf = baos.toByteArray();

@@ -27,8 +27,6 @@ import redelm.utils.Varint;
  * be written is known a priori based on the schema. Assumption is that
  * the values written are between 0 and the bound, inclusive.
  */
-//TODO write tests BEFORE finishing!
-//TODO make the shell for the reader
 public class BoundedIntColumnWriter extends PrimitiveColumnWriter {
   private int currentValue = -1;
   private int currentValueCt = -1;

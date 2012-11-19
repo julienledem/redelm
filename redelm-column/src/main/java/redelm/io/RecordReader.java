@@ -91,8 +91,6 @@ public class RecordReader {
     }
   }
 
-  private static int id=0; //TODO remove
-
   /**
    * reads one record and writes it in the RecordConsumer
    * @param recordConsumer
