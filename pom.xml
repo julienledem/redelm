@@ -70,6 +70,9 @@
         <version>2.10</version>
         <configuration>
           <argLine>-Xmx512m</argLine>
+        	<parallel>classes</parallel>
+        	<useUnlimitedThreads>true</useUnlimitedThreads>
+
         </configuration>
       </plugin>
       <plugin>
